@@ -6,9 +6,10 @@ import random
 import threading
 from datetime import datetime
 
-
 import psycopg2
 from paho.mqtt import client as mqtt_client
+
+from mas import control
 
 config = configparser.ConfigParser()
 config.read(os.path.join(os.getcwd(), '', 'env.ini'))
@@ -32,6 +33,15 @@ point_type_relation = {
 }
 
 attrs = {}
+
+
+class Command(object):
+
+    system_code = None
+    point = None
+    type = None
+    ctrl_type = None
+    value = None
 
 
 class DeviceAttr(object):
@@ -178,6 +188,12 @@ class Meta(object):
         return ans
 
 
+meta = Meta()
+devices = meta.load_devices()
+
+print(devices)
+
+
 class Iot(object):
 
     broker = config['mqtt']['broker']
@@ -223,8 +239,63 @@ class Iot(object):
             self.publish('vent/position/values', json.dumps(msg))
 
     def process_command(self, content):
+        commands = []
         for c in content:
-            print(c)
+            device = self.find_device(c['id'])
+            if None == device:
+                pass
+            commands.append(self.get_command(device, c))
+        control(commands)
+
+    def find_device(self, id):
+        for device in devices:
+            if id == device.id:
+                return device
+        return None
+
+    def get_command(self, device, c):
+        if c['type'] == 'fan':
+            return self.get_fan_command(device, c)
+        elif c['type'] == 'wind_door':
+            pass
+        elif c['type'] == 'wind_window':
+            pass
+        else:
+            pass
+
+    def get_fan_command(self, device, c):
+        command = Command()
+        if c['attr'] == 'freq':
+            a = self.get_attr(device, 'set_freq')
+            command.point = a.code
+            command.system_code = a.system_code
+            command.type = 1
+            command.ctrl_type = 1
+            command.value = c['value']
+        elif c['attr'] == 'is_anti_wind':
+            a = self.get_attr(device, 'set_anti_wind')
+            command.point = a.code
+            command.system_code = a.system_code
+            command.type = 1
+            command.ctrl_type = 1
+            command.value = c['value']
+        elif c['attr'] == 'is_open':
+            a = self.get_attr(device, 'set_open') if c['value'] == 1 else self.get_attr(
+                device, 'set_stop')
+            command.point = a.code
+            command.system_code = a.system_code
+            command.type = 1
+            command.ctrl_type = 1
+            command.value = 1
+        else:
+            pass
+        return command
+
+    def get_attr(self, device, attr_name):
+        for a in device.attrs:
+            if a.name == attr_name:
+                return a
+        return None
 
     def subscribe(self):
         def on_message(client, userdata, msg):
@@ -241,14 +312,9 @@ class Iot(object):
                 self.process_command(content)
         self.client.subscribe('mas.iot.realtimedata')
         self.client.subscribe('mas.iot.PorealTime')
+        self.client.subscribe('vent/device/commands')
         self.client.on_message = on_message
         self.client.loop_start()
 
     def publish(self, topic, msg):
         self.client.publish(topic, payload=msg)
-
-
-# meta = Meta()
-# devices = meta.load_devices()
-# for device in devices:
-#     print(device.name)

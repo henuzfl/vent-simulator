@@ -1,12 +1,9 @@
-from iot import Iot, Meta
+from iot import Iot, devices
 from datetime import datetime
 import time
 
 
 if __name__ == "__main__":
-    pass
-    meta = Meta()
-    devices = meta.load_devices()
     iot = Iot()
     while True:
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
