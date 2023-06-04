@@ -1,4 +1,5 @@
-
+import configparser
+import os
 from urllib.parse import urljoin
 import requests
 import json
@@ -6,18 +7,17 @@ import uuid
 from datetime import datetime
 
 
-web_base_url = 'http://192.168.1.230:6016'
-iot_base_url = 'http://192.168.1.203:19239'
-username = 'demo1'
-password = '813446832bfa405428d7a5d4ffc366a8'
+config = configparser.ConfigParser()
+config.read(os.path.join(os.getcwd(), '', 'env.ini'))
 
 token = None
 
 
+
 def login():
     global token
-    url = urljoin(web_base_url, "/User/Login")
-    payload = {'username': username, 'password': password}
+    url = urljoin(config['mas']['web_base_url'], "/User/Login")
+    payload = {'username': config['mas']['username'], 'password': config['mas']['password']}
     r = requests.post(url, data=payload)
     res = json.loads(r.text)
     if res['code'] == 200:
@@ -48,7 +48,7 @@ def control(commands):
     if token is None:
         login()
     url = urljoin(
-        iot_base_url, '/XAYL_IotService/SystemInformation/SendLinkageControlMsg')
+        config['mas']['iot_base_url'], '/XAYL_IotService/SystemInformation/SendLinkageControlMsg')
     headers = {'token': token, 'Content-Type': 'application/json'}
     command_dict = {}
     for command in commands:

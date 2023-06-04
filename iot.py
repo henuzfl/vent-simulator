@@ -5,14 +5,16 @@ import os
 import random
 import threading
 from datetime import datetime
-
 import psycopg2
 from paho.mqtt import client as mqtt_client
-
 from mas import control
 
 config = configparser.ConfigParser()
 config.read(os.path.join(os.getcwd(), '', 'env.ini'))
+
+point_real_time_topic = 'mas.iot.realtimedata'
+position_real_time_topic = 'mas.iot.PorealTime'
+device_command_topc = 'vent/device/commands'
 
 
 point_type_relation = {
@@ -301,18 +303,15 @@ class Iot(object):
         def on_message(client, userdata, msg):
             topic = msg.topic
             content = json.loads(msg.payload.decode())
-            if topic == 'mas.iot.realtimedata':
+            if topic == point_real_time_topic:
                 self.process_point_content(content)
-            elif topic == 'mas.iot.PorealTime':
+            elif topic == position_real_time_topic:
                 self.process_person_position(content)
-            elif topic == 'vent/device/commands':
-                '''
-                    todo 处理控制信息，发送到梅安森
-                '''
+            elif topic == device_command_topc:
                 self.process_command(content)
-        self.client.subscribe('mas.iot.realtimedata')
-        self.client.subscribe('mas.iot.PorealTime')
-        self.client.subscribe('vent/device/commands')
+        self.client.subscribe(point_real_time_topic)
+        self.client.subscribe(position_real_time_topic)
+        self.client.subscribe(device_command_topc)
         self.client.on_message = on_message
         self.client.loop_start()
 
