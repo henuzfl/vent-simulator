@@ -16,7 +16,7 @@ if __name__ == "__main__":
             if len(device.attrs) < 1:
                 continue
             for attr in device.attrs:
-                if attr.value is None:
+                if attr.value is None or attr.name.startswith('set'):
                     continue
                 content[attr.name] = attr.value
             print(content)

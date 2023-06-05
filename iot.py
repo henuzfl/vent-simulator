@@ -19,8 +19,8 @@ device_command_topc = 'vent/device/commands'
 
 point_type_relation = {
     "频率反馈": "freq",
-    "开控制": "is_open",
-    "关到位信号": "is_open",
+    "关到位信号": "is_close",
+    "开到位信号": "is_open",
     "正风信号": "is_anti_wind",
     "开度反馈": "open_angle",
     "温度": "temperature",
@@ -31,7 +31,9 @@ point_type_relation = {
     "频率给定": "set_freq",
     "反风控制": "set_anti_wind",
     "开控制": "set_open",
-    "停控制": "set_stop"
+    "停控制": "set_stop",
+    "开度给定": 'set_open_angle',
+    "关控制": "set_close"
 }
 
 attrs = {}
@@ -55,7 +57,15 @@ class DeviceAttr(object):
 
     def __init__(self, code, type, system_code):
         self.code = code
-        self.name = point_type_relation[type]
+        if type in point_type_relation:
+            self.name = point_type_relation[type]
+        else:
+            for k in point_type_relation:
+                if type.endswith(k):
+                    self.name = point_type_relation[k]
+                    break
+        if self.name == None:
+            raise KeyError('not found attr')
         self.system_code = system_code
 
     def __str__(self) -> str:
@@ -152,7 +162,7 @@ class Meta(object):
         ans = []
         for wind_door in cursor.fetchall():
             device = Device(wind_door[5], wind_door[2], "windDoor")
-            device.attrs = self.get_device_attrs(1, wind_door[1])
+            device.attrs = self.get_device_attrs(2, wind_door[1])
             ans.append(device)
         cursor.close()
         return ans
@@ -192,8 +202,6 @@ class Meta(object):
 
 meta = Meta()
 devices = meta.load_devices()
-
-print(devices)
 
 
 class Iot(object):
@@ -261,9 +269,19 @@ class Iot(object):
         elif c['type'] == 'wind_door':
             pass
         elif c['type'] == 'wind_window':
-            pass
+            return self.get_wind_window_command(device, c)
         else:
             pass
+
+    def get_wind_window_command(self, deivce, c):
+        command = Command()
+        a = self.get_attr(deivce, 'set_open_angle')
+        command.point = a.code
+        command.system_code = a.system_code
+        command.type = 1
+        command.ctrl_type = 3
+        command.value = str(c['value'])
+        return command
 
     def get_fan_command(self, device, c):
         command = Command()
@@ -272,22 +290,22 @@ class Iot(object):
             command.point = a.code
             command.system_code = a.system_code
             command.type = 1
-            command.ctrl_type = 1
-            command.value = c['value']
+            command.ctrl_type = 3
+            command.value = str(c['value'])
         elif c['attr'] == 'is_anti_wind':
             a = self.get_attr(device, 'set_anti_wind')
             command.point = a.code
             command.system_code = a.system_code
             command.type = 1
-            command.ctrl_type = 1
-            command.value = c['value']
+            command.ctrl_type = 3
+            command.value = str(2 if c['value'] == 0 else 1)
         elif c['attr'] == 'is_open':
             a = self.get_attr(device, 'set_open') if c['value'] == 1 else self.get_attr(
                 device, 'set_stop')
             command.point = a.code
             command.system_code = a.system_code
             command.type = 1
-            command.ctrl_type = 1
+            command.ctrl_type = 3
             command.value = 1
         else:
             pass

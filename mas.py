@@ -13,11 +13,11 @@ config.read(os.path.join(os.getcwd(), '', 'env.ini'))
 token = None
 
 
-
 def login():
     global token
     url = urljoin(config['mas']['web_base_url'], "/User/Login")
-    payload = {'username': config['mas']['username'], 'password': config['mas']['password']}
+    payload = {'username': config['mas']['username'],
+               'password': config['mas']['password']}
     r = requests.post(url, data=payload)
     res = json.loads(r.text)
     if res['code'] == 200:
@@ -56,7 +56,7 @@ def control(commands):
             command_dict[command.system_code] = []
         command_dict[command.system_code].append(command)
     for system_code in command_dict:
-        headers["SystemCode"] = str(system_code)
+        url = url + '?SystemCode=' + str(system_code)
         payload = json.dumps(
             get_playload_by_commands(command_dict[system_code]))
         print(payload)
