@@ -117,7 +117,7 @@ def bind(element_id, element_type, device_id):
     requests.post(url, headers=headers, data=json.dumps(playload))
 
 
-# bind_fans()
-# bind_wind_doors()
-# bind_wind_windows()
+bind_fans()
+bind_wind_doors()
+bind_wind_windows()
 bind_sensors()

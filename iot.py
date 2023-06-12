@@ -279,7 +279,7 @@ class Meta(object):
             points = cursor.fetchall()
             for point in points:
                 if point[3] not in attrs:
-                    attrs[point[3]] = DeviceAttr(point[3], point[9], point[6])
+                    attrs[point[3]] = DeviceAttr(point[3], point[7], point[6])
                 ans.append(attrs[point[3]])
         cursor.close()
         return ans
@@ -287,7 +287,6 @@ class Meta(object):
 
 meta = Meta()
 devices = meta.load_devices()
-
 
 class Iot(object):
 
@@ -323,7 +322,7 @@ class Iot(object):
         ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         for tmp in content:
             msg = {
-                'id': tmp['Id'],
+                'id': tmp['CardNo'],
                 'name': tmp['PersonName'],
                 'type': 'position',
                 'x': tmp['CoordinateX'],
