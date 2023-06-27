@@ -6,7 +6,7 @@ from paho.mqtt import client as mqtt_client
 
 
 def publish():
-    client = mqtt_client.Client("p_0123")
+    client = mqtt_client.Client("p_0123456")
     client.username_pw_set(
         username=config['mqtt']['username'], password=config['mqtt']['password'])
     client.connect(config['mqtt']['broker'], int(config['mqtt']['port']))

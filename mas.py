@@ -33,7 +33,7 @@ def get_playload_by_commands(commands):
         tmp = {
             "Id": str(uuid.uuid4()),
             "Type": 1,
-            "CtrlType": 3,
+            "CtrlType": command.ctrl_type,
             "Message": command.value,
             "PointList": command.point,
             "Time": ts,

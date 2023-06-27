@@ -37,6 +37,7 @@ device_command_topc = 'vent/device/commands'
 温度 16
 湿度 17
 甲烷 18
+广播 99
 '''
 
 attrs = {}
@@ -45,11 +46,13 @@ attrs = {}
 class Command(object):
 
     system_code = None
+    ctrl_type = None
     point = None
     value = None
 
-    def __init__(self, system_code, point, value):
+    def __init__(self, system_code,ctrl_type, point, value):
         self.system_code = system_code
+        self.ctrl_type = ctrl_type
         self.point = point
         self.value = value
 
@@ -195,6 +198,7 @@ class Meta(object):
         ans += self.load_wind_doors()
         ans += self.load_wind_windows()
         ans += self.load_sensors()
+        ans += self.load_broadcasts()
         return ans
 
     def get_lanes(self):
@@ -209,6 +213,20 @@ class Meta(object):
         for l in cursor.fetchall():
             ans.append(l[0])
         return ans
+    
+    def load_broadcasts(self):
+        sql = "select * from vent_broadcast where str_lane_id in {}".format(
+            tuple(self.lane_ids))
+        conn = self.connect_pg()
+        cursor = conn.cursor()
+        cursor.execute(sql)
+        ans = []
+        for broadcast in cursor.fetchall():
+            device = Device(broadcast[8], broadcast[2], "broadcast")
+            device.attrs = self.get_device_attrs(4, broadcast[1])
+            ans.append(device)
+        cursor.close()
+        return ans    
 
     def load_fans(self):
         sql = "select * from vent_fan where str_lane_id in {}".format(
@@ -337,7 +355,7 @@ class Iot(object):
         for c in content:
             device = self.find_device(c['id'])
             if None == device:
-                pass
+                continue
             commands += self.get_commands(device, c)
         control(commands)
 
@@ -354,41 +372,49 @@ class Iot(object):
             return self.get_wind_door_commands(device, c)
         elif c['type'] == 'wind_window':
             return self.get_wind_window_commands(device, c)
+        elif c['type'] == 'broadcast':
+            return self.get_broadcast_commands(device,c)
         else:
             pass
+
+    def get_broadcast_commands(self, device, c):
+        a = device.get_attr(99)
+        if a == None:
+            return []
+        return [Command(a.system_code,4, a.code, str(c['value']))]
 
     def get_wind_door_commands(self, device, c):
         v = c['value']
         a = device.get_attr(11) if v == 0 else device.get_attr(13)
-        return [Command(a.system_code, a.code, '1')]
+        return [Command(a.system_code,3, a.code, '1')]
 
     def get_wind_window_commands(self, device, c):
         a = device.get_attr(10)
-        return [Command(a.system_code, a.code, str(c['value']))]
+        return [Command(a.system_code,3, a.code, str(c['value']))]
 
     def get_fan_commands(self, device, c):
         ans = []
         v = c['value']
         if c['attr'] == 'freq':
             a = device.get_attr(8)
-            ans.append(Command(a.system_code, a.code, str(v)))
+            ans.append(Command(a.system_code,3, a.code, str(v)))
         elif c['attr'] == 'is_anti_wind':
             # 暂停
             a1 = device.get_attr(2)
-            ans.append(Command(a1.system_code, a1.code, '1'))
+            ans.append(Command(a1.system_code,3, a1.code, '1'))
             # 设置反风控制
             a2 = device.get_attr(4)
-            ans.append(Command(a2.system_code, a2.code, '2' if v == 0 else '1'))
+            ans.append(Command(a2.system_code,3, a2.code, '2' if v == 0 else '1'))
             # 启动
             a3 = device.get_attr(5)
-            ans.append(Command(a3.system_code, a3.code, '1'))
+            ans.append(Command(a3.system_code,3, a3.code, '1'))
         elif c['attr'] == 'is_open':
             if v == 1:
                 a = device.get_attr(5)
-                ans.append(Command(a.system_code, a.code, '1'))
+                ans.append(Command(a.system_code,3, a.code, '1'))
             else:
                 a = device.get_attr(2)
-                ans.append(Command(a.system_code, a.code, '1'))
+                ans.append(Command(a.system_code,3, a.code, '1'))
         else:
             pass
         return ans
