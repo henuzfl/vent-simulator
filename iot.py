@@ -320,6 +320,7 @@ class Iot(object):
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
                 print("Connected to MQTT Broker!")
+                self.subscribe()
             else:
                 print("Failed to connect, return code %d\n", rc)
         self.client = mqtt_client.Client(self.client_id)
@@ -327,9 +328,7 @@ class Iot(object):
             username=self.username, password=self.password)
         self.client.on_connect = on_connect
         self.client.connect(self.broker, self.port)
-        self.subscribe()
-        t = threading.Thread(target=self.subscribe,  args=())
-        t.start()
+        self.client.loop_forever()
 
     def process_point_content(self, content):
         for tmp in content:
@@ -439,7 +438,7 @@ class Iot(object):
         self.client.subscribe(position_real_time_topic)
         self.client.subscribe(device_command_topc)
         self.client.on_message = on_message
-        self.client.loop_forever()
+        
 
     def publish(self, topic, msg):
         self.client.publish(topic, payload=msg)
