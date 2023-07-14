@@ -50,7 +50,7 @@ class Command(object):
     point = None
     value = None
 
-    def __init__(self, system_code,ctrl_type, point, value):
+    def __init__(self, system_code, ctrl_type, point, value):
         self.system_code = system_code
         self.ctrl_type = ctrl_type
         self.point = point
@@ -213,7 +213,7 @@ class Meta(object):
         for l in cursor.fetchall():
             ans.append(l[0])
         return ans
-    
+
     def load_broadcasts(self):
         sql = "select * from vent_broadcast where str_lane_id in {}".format(
             tuple(self.lane_ids))
@@ -226,7 +226,7 @@ class Meta(object):
             device.attrs = self.get_device_attrs(4, broadcast[1])
             ans.append(device)
         cursor.close()
-        return ans    
+        return ans
 
     def load_fans(self):
         sql = "select * from vent_fan where str_lane_id in {}".format(
@@ -306,6 +306,7 @@ class Meta(object):
 meta = Meta()
 devices = meta.load_devices()
 
+
 class Iot(object):
 
     broker = config['mqtt']['broker']
@@ -331,32 +332,41 @@ class Iot(object):
         self.client.loop_forever()
 
     def process_point_content(self, content):
-        for tmp in content:
-            if tmp["PointCode"] in attrs:
-                attrs[tmp["PointCode"]].value = tmp["RealtimeValue"]
+        try:
+            for tmp in content:
+                if tmp["PointCode"] in attrs:
+                    attrs[tmp["PointCode"]].value = tmp["RealtimeValue"]
+        except Exception as ex:
+            print("处理测点数据内容异常%s" % ex)
 
     def process_person_position(self, content):
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        for tmp in content:
-            msg = {
-                'id': tmp['CardNo'],
-                'name': tmp['PersonName'],
-                'type': 'position',
-                'x': tmp['CoordinateX'],
-                'y': tmp['CoordinateY'],
-                'z': tmp['CoordinateZ'],
-                'timestamp': ts
-            }
-            self.publish('vent/position/values', json.dumps(msg))
+        try:
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            for tmp in content:
+                msg = {
+                    'id': tmp['CardNo'],
+                    'name': tmp['PersonName'],
+                    'type': 'position',
+                    'x': tmp['CoordinateX'],
+                    'y': tmp['CoordinateY'],
+                    'z': tmp['CoordinateZ'],
+                    'timestamp': ts
+                }
+                self.publish('vent/position/values', json.dumps(msg))
+        except Exception as ex:
+            print("处理人员定位内容异常%s" % ex)
 
     def process_app_control(self, content):
-        commands = []
-        for c in content:
-            device = self.find_device(c['id'])
-            if None == device:
-                continue
-            commands += self.get_commands(device, c)
-        control(commands)
+        try:
+            commands = []
+            for c in content:
+                device = self.find_device(c['id'])
+                if None == device:
+                    continue
+                commands += self.get_commands(device, c)
+            control(commands)
+        except Exception as ex:
+            print("处理应用命令失败%s" % ex)
 
     def find_device(self, id):
         for device in devices:
@@ -372,7 +382,7 @@ class Iot(object):
         elif c['type'] == 'wind_window':
             return self.get_wind_window_commands(device, c)
         elif c['type'] == 'broadcast':
-            return self.get_broadcast_commands(device,c)
+            return self.get_broadcast_commands(device, c)
         else:
             pass
 
@@ -380,40 +390,41 @@ class Iot(object):
         a = device.get_attr(99)
         if a == None:
             return []
-        return [Command(a.system_code,4, a.code, str(c['value']))]
+        return [Command(a.system_code, 4, a.code, str(c['value']))]
 
     def get_wind_door_commands(self, device, c):
         v = c['value']
         a = device.get_attr(11) if v == 0 else device.get_attr(13)
-        return [Command(a.system_code,3, a.code, '1')]
+        return [Command(a.system_code, 3, a.code, '1')]
 
     def get_wind_window_commands(self, device, c):
         a = device.get_attr(10)
-        return [Command(a.system_code,3, a.code, str(c['value']))]
+        return [Command(a.system_code, 3, a.code, str(c['value']))]
 
     def get_fan_commands(self, device, c):
         ans = []
         v = c['value']
         if c['attr'] == 'freq':
             a = device.get_attr(8)
-            ans.append(Command(a.system_code,3, a.code, str(v)))
+            ans.append(Command(a.system_code, 3, a.code, str(v)))
         elif c['attr'] == 'is_anti_wind':
             # 暂停
             a1 = device.get_attr(2)
-            ans.append(Command(a1.system_code,3, a1.code, '1'))
+            ans.append(Command(a1.system_code, 3, a1.code, '1'))
             # 设置反风控制
             a2 = device.get_attr(4)
-            ans.append(Command(a2.system_code,3, a2.code, '2' if v == 0 else '1'))
+            ans.append(Command(a2.system_code, 3,
+                       a2.code, '2' if v == 0 else '1'))
             # 启动
             a3 = device.get_attr(5)
-            ans.append(Command(a3.system_code,3, a3.code, '1'))
+            ans.append(Command(a3.system_code, 3, a3.code, '1'))
         elif c['attr'] == 'is_open':
             if v == 1:
                 a = device.get_attr(5)
-                ans.append(Command(a.system_code,3, a.code, '1'))
+                ans.append(Command(a.system_code, 3, a.code, '1'))
             else:
                 a = device.get_attr(2)
-                ans.append(Command(a.system_code,3, a.code, '1'))
+                ans.append(Command(a.system_code, 3, a.code, '1'))
         else:
             pass
         return ans
@@ -438,7 +449,6 @@ class Iot(object):
         self.client.subscribe(position_real_time_topic)
         self.client.subscribe(device_command_topc)
         self.client.on_message = on_message
-        
 
     def publish(self, topic, msg):
         self.client.publish(topic, payload=msg)
