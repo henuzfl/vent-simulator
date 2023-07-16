@@ -222,7 +222,7 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for broadcast in cursor.fetchall():
-            device = Device(broadcast[8], broadcast[2], "broadcast")
+            device = Device(broadcast[1], broadcast[2], "broadcast")
             device.attrs = self.get_device_attrs(4, broadcast[1])
             ans.append(device)
         cursor.close()
@@ -236,7 +236,7 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for fan in cursor.fetchall():
-            device = Device(fan[5], fan[2], "fan")
+            device = Device(fan[1], fan[2], "fan")
             device.attrs = self.get_device_attrs(0, fan[1])
             ans.append(device)
         cursor.close()
@@ -250,7 +250,7 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for sensor in cursor.fetchall():
-            device = Device(sensor[8], sensor[2], "sensor")
+            device = Device(sensor[1], sensor[2], "sensor")
             device.attrs = self.get_device_attrs(3, sensor[1])
             ans.append(device)
         cursor.close()
@@ -264,7 +264,7 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for wind_door in cursor.fetchall():
-            device = Device(wind_door[5], wind_door[2], "windDoor")
+            device = Device(wind_door[1], wind_door[2], "windDoor")
             device.attrs = self.get_device_attrs(2, wind_door[1])
             ans.append(device)
         cursor.close()
@@ -278,17 +278,17 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for wind_window in cursor.fetchall():
-            device = Device(wind_window[5], wind_window[2], "windWindow")
+            device = Device(wind_window[1], wind_window[2], "windWindow")
             device.attrs = self.get_device_attrs(1, wind_window[1])
             ans.append(device)
         cursor.close()
         return ans
 
-    def get_device_attrs(self, deviceType, deviceId):
+    def get_device_attrs(self, elementType, elementId):
         conn = self.connect_pg()
         cursor = conn.cursor()
         cursor.execute(
-            "select * from tbl_element_bind_info where element_type = %s and element_id = '%s'" % (deviceType, deviceId))
+            "select * from tbl_element_bind_info where element_type = %s and element_id = '%s'" % (elementType, elementId))
         device_info = cursor.fetchone()
         ans = []
         if None != device_info:

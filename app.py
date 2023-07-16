@@ -15,6 +15,9 @@ def publish():
             msg = device.to_message()
             if None != msg:
                 client.publish('vent/device/values', payload=json.dumps(msg))
+        if not client.is_connected:
+            client.connect(config['mqtt']['broker'],
+                           int(config['mqtt']['port']))
         time.sleep(1)
 
 
