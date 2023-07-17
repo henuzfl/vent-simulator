@@ -3,12 +3,12 @@ import configparser
 import json
 import os
 import random
-import threading
 from datetime import datetime
+
 import psycopg2
 from paho.mqtt import client as mqtt_client
+
 from mas import control
-from datetime import datetime
 
 config = configparser.ConfigParser()
 config.read(os.path.join(os.getcwd(), '', 'env.ini'))
@@ -41,6 +41,8 @@ device_command_topc = 'vent/device/commands'
 '''
 
 attrs = {}
+
+attr_device_dict = {}
 
 
 class Command(object):
@@ -77,6 +79,7 @@ class Device(object):
     id = None
     name = None
     type = None
+    is_main = True
     attrs = []
 
     def __init__(self, id, name, type):
@@ -88,6 +91,8 @@ class Device(object):
         return "id:" + self.id + ",name:" + self.name + ",attrs:\t\n" + "\t\n".join(str(a) for a in self.attrs)
 
     def to_message(self):
+        if not self.is_main:
+            return None
         if self.type == 'fan':
             return self.get_fan_message()
         elif self.type == 'windDoor':
@@ -222,9 +227,10 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for broadcast in cursor.fetchall():
-            device = Device(broadcast[1], broadcast[2], "broadcast")
-            device.attrs = self.get_device_attrs(4, broadcast[1])
-            ans.append(device)
+            if None != broadcast[8] and len(broadcast[8]) > 0:
+                device = Device(broadcast[1], broadcast[2], "broadcast")
+                device.attrs = self.get_device_attrs(device, 5, broadcast[8])
+                ans.append(device)
         cursor.close()
         return ans
 
@@ -236,9 +242,15 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for fan in cursor.fetchall():
-            device = Device(fan[1], fan[2], "fan")
-            device.attrs = self.get_device_attrs(0, fan[1])
-            ans.append(device)
+            if None != fan[5] and len(fan[5]) > 0:
+                device = Device(fan[1], fan[2], "fan")
+                device.attrs = self.get_device_attrs(device, 0, fan[5])
+                ans.append(device)
+            if None != fan[6] and len(fan[6]) > 0:
+                device = Device(fan[1], fan[2], "fan")
+                device.is_main = False
+                device.attrs = self.get_device_attrs(device, 0, fan[6])
+                ans.append(device)
         cursor.close()
         return ans
 
@@ -250,9 +262,10 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for sensor in cursor.fetchall():
-            device = Device(sensor[1], sensor[2], "sensor")
-            device.attrs = self.get_device_attrs(3, sensor[1])
-            ans.append(device)
+            if None != sensor[8] and len(sensor[8]) > 0:
+                device = Device(sensor[1], sensor[2], "sensor")
+                device.attrs = self.get_device_attrs(device, 3, sensor[8])
+                ans.append(device)
         cursor.close()
         return ans
 
@@ -264,9 +277,10 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for wind_door in cursor.fetchall():
-            device = Device(wind_door[1], wind_door[2], "windDoor")
-            device.attrs = self.get_device_attrs(2, wind_door[1])
-            ans.append(device)
+            if None != wind_door[5] and len(wind_door[5]) > 0:
+                device = Device(wind_door[1], wind_door[2], "windDoor")
+                device.attrs = self.get_device_attrs(device, 1, wind_door[5])
+                ans.append(device)
         cursor.close()
         return ans
 
@@ -278,17 +292,18 @@ class Meta(object):
         cursor.execute(sql)
         ans = []
         for wind_window in cursor.fetchall():
-            device = Device(wind_window[1], wind_window[2], "windWindow")
-            device.attrs = self.get_device_attrs(1, wind_window[1])
-            ans.append(device)
+            if None != wind_window[5] and len(wind_window[5]) > 0:
+                device = Device(wind_window[1], wind_window[2], "windWindow")
+                device.attrs = self.get_device_attrs(device, 2, wind_window[1])
+                ans.append(device)
         cursor.close()
         return ans
 
-    def get_device_attrs(self, elementType, elementId):
+    def get_device_attrs(self, device, equipment_type, equipment_id):
         conn = self.connect_pg()
         cursor = conn.cursor()
         cursor.execute(
-            "select * from tbl_element_bind_info where element_type = %s and element_id = '%s'" % (elementType, elementId))
+            "select * from tbl_element_bind_info where equipment_type = %s and equipment_id = '%s'" % (equipment_type, equipment_id))
         device_info = cursor.fetchone()
         ans = []
         if None != device_info:
@@ -298,6 +313,7 @@ class Meta(object):
             for point in points:
                 if point[3] not in attrs:
                     attrs[point[3]] = DeviceAttr(point[3], point[7], point[6])
+                attr_device_dict[point[3]] = device
                 ans.append(attrs[point[3]])
         cursor.close()
         return ans
@@ -336,6 +352,12 @@ class Iot(object):
             for tmp in content:
                 if tmp["PointCode"] in attrs:
                     attrs[tmp["PointCode"]].value = tmp["RealtimeValue"]
+                    device = attr_device_dict[tmp["PointCode"]]
+                    if not device.is_main:
+                        device.is_main = True
+                        for d in device:
+                            if device.id == d.id:
+                                d.is_main = False
         except Exception as ex:
             print("处理测点数据内容异常%s" % ex)
 
@@ -361,7 +383,7 @@ class Iot(object):
             commands = []
             for c in content:
                 device = self.find_device(c['id'])
-                if None == device:
+                if None == device or not device.is_main:
                     continue
                 commands += self.get_commands(device, c)
             control(commands)
