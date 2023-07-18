@@ -6,15 +6,19 @@ from paho.mqtt import client as mqtt_client
 
 
 def publish():
-    client = mqtt_client.Client("p_0123456")
+    client = mqtt_client.Client("p_01234567")
     client.username_pw_set(
         username=config['mqtt']['username'], password=config['mqtt']['password'])
     client.connect(config['mqtt']['broker'], int(config['mqtt']['port']))
     while True:
         for device in devices:
-            msg = device.to_message()
-            if None != msg:
-                client.publish('vent/device/values', payload=json.dumps(msg))
+            try:
+                msg = device.to_message()
+                if None != msg:
+                    client.publish('vent/device/values',
+                                   payload=json.dumps(msg))
+            except Exception as ex:
+                print("发送设备信息异常%s" % ex)
         if not client.is_connected:
             client.connect(config['mqtt']['broker'],
                            int(config['mqtt']['port']))

@@ -9,6 +9,7 @@ import psycopg2
 from paho.mqtt import client as mqtt_client
 
 from mas import control
+from vent import callback
 
 config = configparser.ConfigParser()
 config.read(os.path.join(os.getcwd(), '', 'env.ini'))
@@ -379,16 +380,21 @@ class Iot(object):
             print("处理人员定位内容异常%s" % ex)
 
     def process_app_control(self, content):
+        callback_url = content['callbackUrl']
         try:
+            c_content = content['commands']
             commands = []
-            for c in content:
+            for c in c_content:
                 device = self.find_device(c['id'])
                 if None == device or not device.is_main:
                     continue
                 commands += self.get_commands(device, c)
             control(commands)
+            callback(callback_url, 1, "success")
         except Exception as ex:
-            print("处理应用命令失败%s" % ex)
+            error_msg = "处理应用命令失败%s" % ex
+            print(error_msg)
+            callback(callback_url, 2, error_msg)
 
     def find_device(self, id):
         for device in devices:
