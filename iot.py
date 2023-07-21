@@ -250,7 +250,7 @@ class Meta(object):
             if None != fan[6] and len(fan[6]) > 0:
                 device = Device(fan[1], fan[2], "fan")
                 device.is_main = False
-                device.attrs = self.get_device_attrs(device, 0, fan[6])
+                device.attrs = self.get_device_attrs(device, 6, fan[6])
                 ans.append(device)
         cursor.close()
         return ans

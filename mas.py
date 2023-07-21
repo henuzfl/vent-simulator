@@ -62,3 +62,6 @@ def control(commands):
         print(payload)
         r = requests.post(url, data=payload, headers=headers)
         print(r.text)
+        respose = json.loads(r.text)
+        if respose['code'] != 200:
+            raise  requests.HTTPError()
