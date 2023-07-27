@@ -15,7 +15,7 @@ config = configparser.ConfigParser()
 config.read(os.path.join(os.getcwd(), '', 'env.ini'))
 
 point_real_time_topic = 'mas.iot.realtimedata'
-position_real_time_topic = 'mas.iot.PorealTime'
+position_real_time_topic = 'mas.iot.PorealTime.simulator'
 device_command_topc = 'vent/device/commands'
 
 '''
@@ -295,7 +295,7 @@ class Meta(object):
         for wind_window in cursor.fetchall():
             if None != wind_window[5] and len(wind_window[5]) > 0:
                 device = Device(wind_window[1], wind_window[2], "windWindow")
-                device.attrs = self.get_device_attrs(device, 2, wind_window[1])
+                device.attrs = self.get_device_attrs(device, 2, wind_window[5])
                 ans.append(device)
         cursor.close()
         return ans
@@ -322,7 +322,6 @@ class Meta(object):
 
 meta = Meta()
 devices = meta.load_devices()
-
 
 class Iot(object):
 
