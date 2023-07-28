@@ -43,10 +43,25 @@ def get_playload_by_commands(commands):
     return ans
 
 
-def control(commands):
+def check_token():
     global token
     if token is None:
         login()
+    url = urljoin(
+        config['mas']['iot_base_url'], '/Iotservice/Equipmentinfoex/GetList')
+    payload = {}
+    headers = {
+        'Token': token
+    }
+    r = requests.request("GET", url, headers=headers, data=payload)
+    respose = json.loads(r.text)
+    if respose['code'] == 410:
+        login()
+
+
+def control(commands):
+    global token
+    check_token()
     url = urljoin(
         config['mas']['iot_base_url'], '/XAYL_IotService/SystemInformation/SendLinkageControlMsg')
     headers = {'token': token, 'Content-Type': 'application/json'}
@@ -64,4 +79,4 @@ def control(commands):
         print(r.text)
         respose = json.loads(r.text)
         if respose['code'] != 200:
-            raise  requests.HTTPError()
+            raise requests.HTTPError()
