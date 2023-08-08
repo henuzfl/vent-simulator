@@ -5,10 +5,11 @@ import os
 import random
 from datetime import datetime
 
-import psycopg2
 from paho.mqtt import client as mqtt_client
+from commons import Command
 
 from mas import control
+from meta import Meta
 from vent import callback
 
 config = configparser.ConfigParser()
@@ -41,287 +42,6 @@ device_command_topc = 'vent/device/commands'
 广播 99
 '''
 
-attrs = {}
-
-attr_device_dict = {}
-
-
-class Command(object):
-
-    system_code = None
-    ctrl_type = None
-    point = None
-    value = None
-
-    def __init__(self, system_code, ctrl_type, point, value):
-        self.system_code = system_code
-        self.ctrl_type = ctrl_type
-        self.point = point
-        self.value = value
-
-
-class DeviceAttr(object):
-
-    code = None
-    use_type = None
-    system_code = None
-    value = None
-
-    def __init__(self, code, use_type, system_code):
-        self.code = code
-        self.use_type = use_type
-        self.system_code = system_code
-
-    def __str__(self):
-        return "code:" + self.code + ",use_type:" + str(self.use_type) + ",value:" + "None" if None == self.value else str(self.value)
-
-
-class Device(object):
-    id = None
-    name = None
-    type = None
-    is_main = True
-    attrs = []
-
-    def __init__(self, id, name, type):
-        self.id = id
-        self.name = name
-        self.type = type
-
-    def __str__(self):
-        return "id:" + self.id + ",name:" + self.name + ",attrs:\t\n" + "\t\n".join(str(a) for a in self.attrs)
-
-    def to_message(self):
-        if not self.is_main:
-            return None
-        if self.type == 'fan':
-            return self.get_fan_message()
-        elif self.type == 'windDoor':
-            return self.get_wind_door_message()
-        elif self.type == 'windWindow':
-            return self.get_wind_window_message()
-        elif self.type == 'sensor':
-            return self.get_sensor_message()
-        else:
-            pass
-
-    def get_fan_message(self):
-        ans = {
-            "id": self.id,
-            "type": self.type,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        freq = self.get_attr_value(7)
-        if None != freq:
-            ans["freq"] = freq
-        forward_signal = self.get_attr_value(6)
-        anti_signal = self.get_attr_value(3)
-        if forward_signal != None and anti_signal != None:
-            ans['is_open'] = 0 if (
-                forward_signal == '0' and anti_signal == '0') else 1
-        if forward_signal != None:
-            ans['is_anti_wind'] = 1 if forward_signal == '0' else 0
-        if anti_signal != None:
-            ans['is_anti_wind'] = 1 if anti_signal == '1' else 0
-        return ans
-
-    def get_wind_window_message(self):
-        ans = {
-            "id": self.id,
-            "type": self.type,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        open_angle = self.get_attr_value(9)
-        if None != open_angle:
-            ans["open_angle"] = open_angle
-        return ans
-
-    def get_wind_door_message(self):
-        ans = {
-            "id": self.id,
-            "type": self.type,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        is_open = self.get_attr_value(12)
-        if None != is_open:
-            ans["is_open"] = int(is_open)
-        return ans
-
-    def get_sensor_message(self):
-        ans = {
-            "id": self.id,
-            "type": self.type,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        speed = self.get_attr_value(14)
-        if None != speed:
-            ans['speed'] = speed
-        pressure = self.get_attr_value(15)
-        if None != pressure:
-            ans['pressure'] = pressure
-        temperature = self.get_attr_value(16)
-        if None != temperature:
-            ans['temperature'] = temperature
-        humidity = self.get_attr_value(17)
-        if None != humidity:
-            ans['humidity'] = humidity
-        gas = self.get_attr_value(18)
-        if None != gas:
-            ans['gas'] = gas
-        return ans
-
-    def get_attr_value(self, type):
-        a = self.get_attr(type)
-        return None if a == None else a.value
-
-    def get_attr(self, type):
-        for a in self.attrs:
-            if a.use_type == type:
-                return a
-        return None
-
-
-class Meta(object):
-
-    pg_host = config['pg']['host']
-    pg_port = int(config['pg']['port'])
-    pg_database = config['pg']['database']
-    pg_user = config['pg']['user']
-    pg_password = config['pg']['password']
-    lane_ids = None
-
-    def __init__(self):
-        self.lane_ids = self.get_lanes()
-
-    def connect_pg(self):
-        conn = psycopg2.connect(host=self.pg_host, port=self.pg_port,
-                                database=self.pg_database, user=self.pg_user, password=self.pg_password)
-        return conn
-
-    def load_devices(self):
-        ans = []
-        ans += self.load_fans()
-        ans += self.load_wind_doors()
-        ans += self.load_wind_windows()
-        ans += self.load_sensors()
-        ans += self.load_broadcasts()
-        return ans
-
-    def get_lanes(self):
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(
-            "select str_id as scheme_id from vent_scheme where is_current = 1")
-        scheme_id = cursor.fetchone()[0]
-        cursor.execute(
-            "select str_id as lane_id from vent_lane where str_scheme_id='{}'".format(scheme_id))
-        ans = []
-        for l in cursor.fetchall():
-            ans.append(l[0])
-        return ans
-
-    def load_broadcasts(self):
-        sql = "select * from vent_broadcast where str_lane_id in {}".format(
-            tuple(self.lane_ids))
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        ans = []
-        for broadcast in cursor.fetchall():
-            if None != broadcast[8] and len(broadcast[8]) > 0:
-                device = Device(broadcast[1], broadcast[2], "broadcast")
-                device.attrs = self.get_device_attrs(device, 5, broadcast[8])
-                ans.append(device)
-        cursor.close()
-        return ans
-
-    def load_fans(self):
-        sql = "select * from vent_fan where str_lane_id in {}".format(
-            tuple(self.lane_ids))
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        ans = []
-        for fan in cursor.fetchall():
-            if None != fan[5] and len(fan[5]) > 0:
-                device = Device(fan[1], fan[2], "fan")
-                device.attrs = self.get_device_attrs(device, 0, fan[5])
-                ans.append(device)
-            if None != fan[6] and len(fan[6]) > 0:
-                device = Device(fan[1], fan[2], "fan")
-                device.is_main = False
-                device.attrs = self.get_device_attrs(device, 6, fan[6])
-                ans.append(device)
-        cursor.close()
-        return ans
-
-    def load_sensors(self):
-        sql = "select * from vent_sensor where str_lane_id in {}".format(
-            tuple(self.lane_ids))
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        ans = []
-        for sensor in cursor.fetchall():
-            if None != sensor[8] and len(sensor[8]) > 0:
-                device = Device(sensor[1], sensor[2], "sensor")
-                device.attrs = self.get_device_attrs(device, 3, sensor[8])
-                ans.append(device)
-        cursor.close()
-        return ans
-
-    def load_wind_doors(self):
-        sql = "select * from vent_structure where str_vs_type = '风门' and str_lane_id in {}".format(
-            tuple(self.lane_ids))
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        ans = []
-        for wind_door in cursor.fetchall():
-            if None != wind_door[5] and len(wind_door[5]) > 0:
-                device = Device(wind_door[1], wind_door[2], "windDoor")
-                device.attrs = self.get_device_attrs(device, 1, wind_door[5])
-                ans.append(device)
-        cursor.close()
-        return ans
-
-    def load_wind_windows(self):
-        sql = "select * from vent_structure where str_vs_type = '风窗' and str_lane_id in {}".format(
-            tuple(self.lane_ids))
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(sql)
-        ans = []
-        for wind_window in cursor.fetchall():
-            if None != wind_window[5] and len(wind_window[5]) > 0:
-                device = Device(wind_window[1], wind_window[2], "windWindow")
-                device.attrs = self.get_device_attrs(device, 2, wind_window[5])
-                ans.append(device)
-        cursor.close()
-        return ans
-
-    def get_device_attrs(self, device, equipment_type, equipment_id):
-        conn = self.connect_pg()
-        cursor = conn.cursor()
-        cursor.execute(
-            "select * from tbl_element_bind_info where equipment_type = %s and equipment_id = '%s'" % (equipment_type, equipment_id))
-        device_info = cursor.fetchone()
-        ans = []
-        if None != device_info:
-            cursor.execute(
-                "select * from tbl_element_bind_point where element_bind_info_id = %s" % (device_info[0]))
-            points = cursor.fetchall()
-            for point in points:
-                if point[3] not in attrs:
-                    attrs[point[3]] = DeviceAttr(point[3], point[7], point[6])
-                attr_device_dict[point[3]] = device
-                ans.append(attrs[point[3]])
-        cursor.close()
-        return ans
-
-
-meta = Meta()
-devices = meta.load_devices()
 
 class Iot(object):
 
@@ -330,7 +50,6 @@ class Iot(object):
     username = config['mqtt']['username']
     password = config['mqtt']['password']
     client_id = f'vent_simulator_' + str(random.randrange(0, 100))
-
     client = None
 
     def __init__(self):
@@ -343,6 +62,7 @@ class Iot(object):
         self.client = mqtt_client.Client(self.client_id)
         self.client.username_pw_set(
             username=self.username, password=self.password)
+        self.meta = Meta()
         self.client.on_connect = on_connect
         self.client.connect(self.broker, self.port)
         self.client.loop_forever()
@@ -350,9 +70,10 @@ class Iot(object):
     def process_point_content(self, content):
         try:
             for tmp in content:
-                if tmp["PointCode"] in attrs:
-                    attrs[tmp["PointCode"]].value = tmp["RealtimeValue"]
-                    device = attr_device_dict[tmp["PointCode"]]
+                if tmp["PointCode"] in self.meta.attrs:
+                    self.meta.attrs[tmp["PointCode"]
+                                    ].value = tmp["RealtimeValue"]
+                    device = self.meta.attr_device_dict[tmp["PointCode"]]
                     if not device.is_main:
                         device.is_main = True
                         for d in device:
@@ -396,7 +117,7 @@ class Iot(object):
             callback(callback_url, 2, error_msg)
 
     def find_device(self, id):
-        for device in devices:
+        for device in self.meta.devices:
             if id == device.id:
                 return device
         return None
@@ -462,8 +183,14 @@ class Iot(object):
                 return a
         return None
 
+    last_update_at = None
+
     def subscribe(self):
         def on_message(client, userdata, msg):
+            current_update_at = self.meta.get_recent_update_at()
+            if self.last_update_at != None and self.last_update_at != current_update_at:
+                self.meta = Meta()
+            self.last_update_at = current_update_at
             topic = msg.topic
             content = json.loads(msg.payload.decode())
             if topic == point_real_time_topic:
